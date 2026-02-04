@@ -1,0 +1,9 @@
+Random Seed Used: 42
+
+Applied to:
+- NumPy
+- TensorFlow
+- Python random module
+
+Purpose:
+Ensures reproducibility of model training, dataset shuffling, and anomaly score generation.
