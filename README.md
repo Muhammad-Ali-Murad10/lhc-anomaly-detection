@@ -259,4 +259,24 @@ With more compute and guidance, the next steps would be:
    - Study latency and resource usage under realistic trigger constraints
    - Explore model compression and FPGA mapping (e.g. via **hls4ml**)
    - Co-design algorithms with hardware and bandwidth limits in mind, as emphasized in the original paper.
+  
+
+## 6. References
+
+E. Govorkova, E. Puljak, T. Aarrestad, M. Pierini,
+K. A. Woźniak, and J. Ngadiuba,
+“LHC physics dataset for unsupervised New Physics detection at 40 MHz”,
+Scientific Data 9, 2022.
+arXiv:2107.02157
+
+
+## 7. Acknowledgements
+
+This project is directly inspired by the work of Govorkova et al. and the
+associated ADC2021 community challenge. I spent a significant amount of time
+carefully reading the paper, understanding the dataset structure, and reproducing
+a full end-to-end baseline in a constrained Colab environment.
+
+Thanks to the teams at CERN, Fermilab, Caltech, and the wider HEP–ML community
+for making such realistic open datasets and challenges available.
 
