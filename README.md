@@ -260,15 +260,3 @@ With more compute and guidance, the next steps would be:
    - Explore model compression and FPGA mapping (e.g. via **hls4ml**)
    - Co-design algorithms with hardware and bandwidth limits in mind, as emphasized in the original paper.
 
----
-
-## 6. How to Run
-
-> **Note:** The dataset itself is not hosted in this repo.  
-> You must download it from the official sources (Govorkova *et al.* / ADC2021).
-
-1. **Clone the repository**
-
-```bash
-git clone <your-github-url>.git
-cd <your-repo-name>
