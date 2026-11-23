@@ -1,282 +1,174 @@
-# Unsupervised Anomaly Detection in LHC 40 MHz Trigger Data
+# Unsupervised LHC Anomaly Detection — ADC2021 Baseline and Reliability Audit
 
-> **TL;DR**: This repo implements a **fully unsupervised deep autoencoder** on the  
-> **“LHC physics dataset for unsupervised New Physics detection at 40 MHz”**  
-> (Govorkova *et al.*, Scientific Data 2022, CERN/FNAL).  
-> Trained only on **Standard Model background**, the model reaches  
-> **ROC–AUC ≈ 0.99** on all four benchmark signals and produces a ranked  
-> list of the most anomalous events in the blind blackbox sample.
+**Research reproduction | Simulation benchmark | Background-only training**
 
----
+This repository contains a reproducible *baseline experiment* for detecting unusual particle-collision events in the [ADC2021](https://mpp-hep.github.io/ADC2021/) dataset, together with a statistical reliability audit.
 
-## Table of Contents
+**Status:** Baseline and initial audit completed. Independent-seed replications, event-level score exports, and a calibrated low-FPR comparison of alternative models are **not yet completed**. This is **not** a new-physics discovery, a deployed LHC trigger, or an established novel algorithm.
 
-- [1. Overview](#1-overview)
-- [2. Dataset & Physics Context](#2-dataset--physics-context)
-- [3. Methodology](#3-methodology)
-  - [3.1 Preprocessing](#31-preprocessing)
-  - [3.2 Model Architecture](#32-model-architecture)
-  - [3.3 Training Setup](#33-training-setup)
-- [4. Results](#4-results)
-- [5. Limitations & Future Work](#5-limitations--future-work)
-- [6. How to Run](#6-how-to-run)
-- [7. References](#7-references)
-- [8. Acknowledgements](#8-acknowledgements)
+> **Main finding:** A dense autoencoder reaches ROC-AUC **0.595–0.849** across four simulated Beyond Standard Model (BSM) signals. Its nominal 10⁻⁵ calibration threshold produces an observed held-out background FPR of **1.673 × 10⁻⁵**, so strict-FPR detection performance cannot be claimed at exactly 10⁻⁵. An exploratory latent-space Isolation Forest improves ROC-AUC across all four signals; its low-FPR performance remains unmeasured.
 
----
 
-## 1. Overview
+## Quick navigation
 
-The goal of this project is to study **unsupervised anomaly detection** for  
-**New Physics at the LHC**, using the public benchmark:
+- **[Executed benchmark notebook](notebooks/LHC_ADC2021_Strict_Baseline_Executed.ipynb)** — actual code, training, and outputs
+- **[Verified results and caveats](RESULTS.md)** — what the run measured
+- **[Reliability audit](reliability_audit/AUDIT_REPORT.md)** — strict-FPR checks and uncertainty
+- **[Interview research story](PROJECT_STORY.md)** — motivation, lessons, and next steps
 
-> *LHC physics dataset for unsupervised New Physics detection at 40 MHz*  
-> by E. Govorkova, E. Puljak, T. Aarrestad, M. Pierini,  
-> K. A. Woźniak, and J. Ngadiuba (CERN, Univ. of Vienna, Fermilab, Caltech).
+## 1. Why this experiment?
 
-In this work, we:
+At high event rates, selecting unusual collisions while rejecting Standard Model (SM) background requires both effective anomaly ranking and reliable false-positive control. This project asks:
 
-- Train a **fully-connected autoencoder** on **background-only** events
-- Use **reconstruction error** as an anomaly score
-- Evaluate on four labeled New Physics benchmarks
-- Rank events from a **blind blackbox sample** and output the **Top-K anomalies**
+1. What can a background-only dense autoencoder detect across four different simulated BSM processes?
+2. Does a threshold calibrated on independent SM background meet its target false-positive rate on held-out SM data?
+3. Does latent-space Isolation Forest merit further evaluation?
 
-Despite being implemented on **Google Colab with limited RAM, storage, and session time**,  
-this simple baseline shows that an AE can already separate signal from background very well,  
-and highlight promising rare events in a realistic trigger-like data stream.
+The benchmark comes from Govorkova et al.'s public LHC simulation dataset. No experimental real-time detector data are used here.
 
----
+## 2. Data and provenance
 
-## 2. Dataset & Physics Context
+Use the **official v2** records linked by the [ADC2021 challenge](https://mpp-hep.github.io/ADC2021/):
 
-At the **Large Hadron Collider (LHC)**:
+| Role | Official Zenodo record |
+|---|---|
+| SM background training sample | [5046428](https://zenodo.org/records/5046428) |
+| A → 4 leptons | [7152590](https://zenodo.org/records/7152590) |
+| h⁰ → ττ | [7152614](https://zenodo.org/records/7152614) |
+| h⁺ → τν | [7152617](https://zenodo.org/records/7152617) |
+| Leptoquark → bτ | [7152599](https://zenodo.org/records/7152599) |
+| Unlabeled blackbox | [5072068](https://zenodo.org/records/5072068) |
 
-- Proton–proton collisions occur at rates of order **10⁸ per second**
-- The raw detector output is **tens of terabytes per second**
-- Experiments like ATLAS and CMS must reduce this to **≈ 10³ events/s** for storage using **real-time trigger systems**
+The executed notebook verifies the official SM-background file against MD5:
 
-Traditional triggers are optimized for **known signatures** (e.g., high-pT leptons, missing energy, invariant mass windows).  
-This raises a key concern:
+`08cb4801229f9d480567f8d3f5cac134`
 
-> *What if truly unexpected New Physics does not match any of these patterns and gets discarded?*
+It records **13,451,915** background events, partitioned with seed 42 as follows:
 
-Govorkova *et al.* propose a dataset and challenge where:
+| Partition | Events | Purpose |
+|---|---:|---|
+| Training | 6,725,957 | Fit scaler and autoencoder |
+| Model validation | 1,345,191 | Early stopping / model selection |
+| Threshold calibration | 2,690,383 | Choose anomaly-score thresholds |
+| Background test | 2,690,384 | Independent FPR estimation |
 
-- Events emulate a **Hardware/Level-1 trigger stream**
-- They are **pre-filtered** by requiring at least one high-pT electron or muon
-- Each event contains up to **19 reconstructed objects**:
-  - MET
-  - Up to 4 electrons
-  - Up to 4 muons
-  - Up to 10 jets
-- Each object is described by 4 features:
-  - \( p_T \), \( \eta \), \( \phi \), and an **object-type ID**
-- Missing objects are **zero-padded**, yielding arrays of shape `(N_events, 19, 4)`
+The four labeled BSM samples are used for **evaluation**, not autoencoder training or threshold calibration. The unlabeled blackbox is used only for ranking events.
 
-The dataset includes:
+**Data are not redistributed in GitHub.** Download them from Zenodo, follow the corresponding usage conditions, and attach them to a Kaggle notebook or update the input paths.
 
-- A **background “cocktail”** (`BKG_dataset.h5`) with splits:
-  - `X_train`, `X_val`, `X_test` – treated as **Standard Model only**
-- Four **labeled New Physics benchmark signals**:
-  - A → 4ℓ  
-  - h⁰ → ττ  
-  - h± → τν  
-  - Leptoquark (LQ) → bτ
-- A **blackbox sample** (mixture of background + hidden signals) with no labels, intended for **blind evaluation**
+## 3. Method
 
-Our work follows the spirit of the **ADC2021 community challenge** associated with this dataset.
+### 3.1 Features and preprocessing
 
----
+Events contain up to 19 physics objects and four original attributes per object. The baseline keeps `pT`, `eta`, and `phi`, drops the original type channel, applies `log1p(max(pT, 0))`, and flattens the event into **57 features**. Mean and standard deviation are learned from **training background only** and reused unchanged at evaluation.
 
-## 3. Methodology
+### 3.2 Dense autoencoder
 
-### 3.1 Preprocessing
+- Architecture: **57 → 256 → Dropout(0.30) → 128 → 64 → 128 → 256 → 57**
+- Reconstruction loss: mean squared error (MSE)
+- Optimizer: Adam, starting learning rate `0.001`
+- Batch size: **2,048**; up to **60** epochs with early stopping
+- Best validation epoch in this run: **29**, best validation MSE ≈ **0.02165**
+- Anomaly score: mean squared reconstruction error per event
+- The 64-unit latent layer is **not a compressive bottleneck** relative to 57 inputs.
 
-For each event, we construct a **57-dimensional feature vector**:
+For low-FPR estimates, thresholds are derived only from the held-out **calibration background** and assessed separately on the **test background**. An exploratory Isolation Forest is fitted on latent representations of a subset of training-background events.
 
-1. **Feature selection**
+## 4. Results (single executed run, seed 42)
 
-   - Use only the first **3 features** per object:
-     - \( p_T \), \( \eta \), \( \phi \)
-   - Ignore the 4th object-type channel in this baseline
-   - With 19 objects × 3 features → **19 × 3 = 57 features**
+### 4.1 Discrimination across BSM benchmarks
 
-2. **Physics-motivated scaling**
+| Signal | AE ROC-AUC | Isolation Forest ROC-AUC | AE TPR at nominal 10⁻⁵ calibration threshold |
+|---|---:|---:|---:|
+| A → 4 leptons | 0.8490 | 0.8820 | 3.2750% |
+| h⁰ → ττ | 0.5953 | 0.6567 | 0.0974% |
+| h⁺ → τν | 0.6289 | 0.8296 | 0.0629% |
+| Leptoquark → bτ | 0.6881 | 0.7798 | 0.0593% |
+| **Unweighted macro mean** | **0.6903** | **0.7870** | — |
 
-   - Apply log scaling to transverse momentum:
-     \[
-     p_T \leftarrow \log(1 + \max(p_T, 0))
-     \]
+**Important:** The last column reflects a threshold **calibrated toward** a nominal FPR of 10⁻⁵, **not** a threshold proven to achieve test FPR ≤ 10⁻⁵. Isolation Forest has not yet been evaluated using independently calibrated low-FPR thresholds; its ROC-AUC advantage is exploratory.
 
-3. **Flattening and normalization**
+The signal-vs-background class proportions differ by process, so average-precision values should be interpreted alongside their prevalence; see `results/signal_metrics.csv`.
 
-   - Flatten events from `(19, 3)` to `(57,)`
-   - Compute **mean and standard deviation** on the background training set
-   - Normalize all data (train/val/test, signals, blackbox) via:
-     \[
-     x_{\text{norm}} = (x - \mu) / \sigma
-     \]
+### 4.2 Independent background FPR audit
 
-Note: We experimented with more advanced preprocessing  
-(e.g., φ → (sin φ, cos φ) and masking padded entries using the object-type flag),  
-but due to time and resource constraints these were not fully integrated in the final stable baseline.
+| Nominal calibration target | Test false positives / test background | Observed test FPR | Approximate exact 95% interval |
+|---|---|---|---|
+| 10⁻³ | 2,810 / 2,690,384 | 1.0445 × 10⁻³ | [1.0062, 1.0838] × 10⁻³ |
+| 10⁻⁴ | 289 / 2,690,384 | 1.0742 × 10⁻⁴ | [0.9539, 1.2054] × 10⁻⁴ |
+| 10⁻⁵ | 45 / 2,690,384 | 1.6726 × 10⁻⁵ | [1.2200, 2.2381] × 10⁻⁵ |
 
----
-
-### 3.2 Model Architecture
-
-We use a **fully-connected autoencoder**:
-
-- **Input**: 57-D normalized feature vector
-
-- **Encoder**:
-  - Dense(256, ReLU)
-  - Dense(128, ReLU)
-  - Dense(64, ReLU)
-  - Bottleneck: Dense(32, ReLU)
-
-- **Decoder** (symmetrical):
-  - Dense(64, ReLU)
-  - Dense(128, ReLU)
-  - Dense(256, ReLU)
-  - Output: Dense(57, linear)
-
-The autoencoder is trained **only on background events**, so it learns the  
-“typical” Standard Model manifold, without ever seeing signal labels.
-
----
-
-### 3.3 Training Setup
-
-- Loss: **Mean Squared Error (MSE)** between input and reconstructed output
-- Optimizer: **Adam**
-  - Initial learning rate: `1e-3`
-  - Learning rate reduced on plateau (e.g. halved when validation loss stalls)
-- Training:
-  - ~**50 epochs**
-  - Batch size: **1024**
-  - Train on `X_train`, validate on `X_val`
-- Implementation: TensorFlow/Keras, developed in **Google Colab**
-
-We also set random seeds (Python, NumPy, TensorFlow) and deterministic settings where possible  
-to improve reproducibility.
-
----
-
-## 4. Results
-
-### 4.1 Background reconstruction error
-
-On the background test sample (`X_test`):
-
-- **Min score** ≈ 2.2 × 10⁻⁵  
-- **Mean score** ≈ 1.86 × 10⁻²  
-- **Max score** ≈ 3.25 × 10²  
-
-Only a small fraction of background events have very large reconstruction error,  
-consistent with a few hard outliers.
-
-### 4.2 Signal separation
-
-For each signal benchmark, we form:
-
-- `y = 0` for background test events  
-- `y = 1` for signal events  
-- `score = MSE reconstruction error`
-
-We then compute the **ROC–AUC**:
-
-- A → 4ℓ:        **≈ 0.993**  
-- h⁰ → ττ:       **≈ 0.979**  
-- h± → τν:       **≈ 0.988**  
-- LQ → bτ:       **≈ 0.987**
-
-Combined **Precision–Recall AUC** (background + all signals): **≈ 0.955**
-
-This shows that a simple fully-connected AE, trained without labels,  
-can rank signal events above background extremely well.
-
-### 4.3 TPR at fixed FPR
-
-We also study **trigger-like operating points**:
-
-- TPR @ FPR = 10⁻³  → **≈ 0.094**  
-- TPR @ FPR = 10⁻⁴  → **≈ 0.0099**  
-- TPR @ FPR = 10⁻⁵  → **≈ 0.00245**
-
-Interpretation:
-
-- At **0.1% background false-positive rate**, we recover about **9%** of signal events.
-- Pushing FPR down to 10⁻⁴–10⁻⁵ selects only the **most extreme tail** of the signal distribution.
-
-Crucially, the background and signal score distributions **overlap**, so there is **no single threshold** that:
-
-- flags **all** signal events as anomalies,  
-- rejects **all** background, and  
-- also yields a fixed small fraction of anomalies in the blackbox.
-
-### 4.4 Blackbox ranking
-
-For the **blind blackbox sample**:
-
-- We compute the anomaly score for each event
-- Sort events by score (descending)
-- Extract the **Top-K most anomalous events**
-
-We provide a file (e.g.):
-
-- `adc2021_top1000.csv` – containing the **IDs of the 1,000 most anomalous blackbox events**,  
-  following the ADC2021 challenge format.
-
-You can adjust `K` to control how many candidate events you want to inspect.
-
----
-
-## 5. Limitations & Future Work
-
-This project was carried out entirely on **free Google Colab**, which imposes:
-
-- Limited **RAM** and **disk space**
-- Short **GPU session time** (often tens of minutes to ~1–2 hours)
-- No persistent high-end compute environment
-
-Because of these constraints, we focused on obtaining a **clean, well-understood baseline**  
-rather than exploring very large or complex models.
-
-With more compute and guidance, the next steps would be:
-
-1. **Physics-informed preprocessing**
-   - Use the **object-type flag** to build masks and ignore padded entries in the loss
-   - Encode φ as **(sin φ, cos φ)** to handle periodicity
-   - Explore per-object or per-class loss weighting (e.g., give more weight to leptons)
-
-2. **Richer models**
-   - Set/graph-based architectures that treat the 19 objects as a permutation-invariant set
-   - Variational or denoising autoencoders
-   - Normalizing flows or other density-based anomaly scores
-
-3. **Trigger-oriented deployment**
-   - Study latency and resource usage under realistic trigger constraints
-   - Explore model compression and FPGA mapping (e.g. via **hls4ml**)
-   - Co-design algorithms with hardware and bandwidth limits in mind, as emphasized in the original paper.
-  
-
-## 6. References
-
-E. Govorkova, E. Puljak, T. Aarrestad, M. Pierini,
-K. A. Woźniak, and J. Ngadiuba,
-“LHC physics dataset for unsupervised New Physics detection at 40 MHz”,
-Scientific Data 9, 2022.
-arXiv:2107.02157
-
-
-## 7. Acknowledgements
-
-This project is directly inspired by the work of Govorkova et al. and the
-associated ADC2021 community challenge. I spent a significant amount of time
-carefully reading the paper, understanding the dataset structure, and reproducing
-a full end-to-end baseline in a constrained Colab environment.
-
-Thanks to the teams at CERN, Fermilab, Caltech, and the wider HEP–ML community
-for making such realistic open datasets and challenges available.
-
+The reported intervals treat test events as approximately independent and the calibration thresholds as fixed; systematic shifts and threshold-estimation uncertainty are not covered by these intervals. In this run, the strictest operating point exceeds its nominal FPR target.
+
+### 4.3 Blackbox ranking
+
+`results/blackbox_top_1e-5_fraction.csv` contains the selected unlabeled blackbox event IDs at a fraction of 10⁻⁵. The notebook also produces `blackbox_top_1000.csv` for exploratory ranking. **No blackbox ground truth is available here, so rankings do not establish a discovery or signal purity.**
+
+## 5. Reliability, limitations, and responsible interpretation
+
+- Only **one random seed** was evaluated; cross-seed variability is unknown.
+- Calibration at **10⁻⁵** depends on only **26 calibration-background exceedances** in this run.
+- Isolation Forest was evaluated by ROC-AUC and average precision but **not** by low-FPR TPR.
+- Padded particle slots and the periodicity of `phi` are **not explicitly modeled** by this baseline.
+- Original split indices and raw per-event score arrays were **not included** in the collected result bundle; the audit therefore cannot independently verify sample membership or recompute confidence intervals by resampling scores.
+- Computational cost, trigger latency, and hardware deployment are **not established**.
+- The audit is **an analysis of one completed run**, not independent replication or evidence of algorithmic novelty.
+
+The `reliability_audit/AUDIT_REPORT.md` file details these checks.
+
+## 6. Reproduce in Kaggle
+
+1. Create a Kaggle notebook and attach the official ADC2021 v2 files above.
+2. Open `notebooks/LHC_ADC2021_Strict_Baseline_Executed.ipynb`. The executable cells expect input datasets under `/kaggle/input/`; review the configuration cell if your paths differ.
+3. Ensure there is enough temporary disk space for the downloaded background under `/kaggle/working/`; Kaggle `/kaggle/input/` is read-only. Enable notebook internet access if background download is required.
+4. Run all cells in order. The default output directory is `/kaggle/working/lhc_adc2021_strict_baseline`.
+5. To generate a reliability audit for the new run, open `notebooks/LHC_Reliability_Audit_AddOn.ipynb` and execute it after the baseline. The included `reliability_audit/` outputs reflect the documented historical run, not an automatic re-audit of a new run.
+
+The executed notebook records TensorFlow **2.21.0** and visible GPUs. Exact reproducibility also requires the original data versions, dependency versions, device/runtime configuration, and saved split assignments; not all are captured in the existing run.
+
+## 7. Repository structure
+
+```text
+.
+├── README.md
+├── RESULTS.md
+├── PROJECT_STORY.md
+├── requirements.txt
+├── .gitignore
+├── notebooks/
+│   ├── LHC_ADC2021_Strict_Baseline_Executed.ipynb
+│   └── LHC_Reliability_Audit_AddOn.ipynb
+├── results/
+│   ├── run_metadata.json
+│   ├── signal_metrics.csv
+│   ├── calibration_thresholds.csv
+│   ├── isolation_forest_metrics.csv
+│   └── blackbox_top_1e-5_fraction.csv
+├── reliability_audit/
+│   ├── AUDIT_REPORT.md
+│   ├── AUDIT_SUMMARY.json
+│   ├── fpr_reliability.csv
+│   ├── model_comparison.csv
+│   └── signal_efficiencies_with_achieved_fpr.csv
+└── scripts/
+    ├── LHC_Reliability_Audit_AddOn.py
+    └── export_non_h5_kaggle.py
+```
+
+*GitHub does not contain the large dataset files. The saved model checkpoints and scaler are optional small artifacts that can be exported from Kaggle for restoration.*
+
+## 8. Next research steps
+
+The immediate next iteration is **reliability-focused**: export per-event scores and split identifiers, repeat the baseline across at least three independent seeds, and evaluate Isolation Forest under independently calibrated low-FPR thresholds. Only after these tests should physics-aware masking, angular features, or changes to latent dimensionality be considered controlled architectural ablations.
+
+These plans are **not completed results** and do not imply guaranteed improvement.
+
+## 9. References and attribution
+
+- E. Govorkova, E. Puljak, T. Aarrestad, M. Pierini, K. A. Wozniak, and J. Ngadiuba. *LHC physics dataset for unsupervised New Physics detection at 40 MHz*. Scientific Data **9**, 2022. [arXiv:2107.02157](https://arxiv.org/abs/2107.02157).
+- [ADC2021 benchmark and challenge](https://mpp-hep.github.io/ADC2021/).
+- Dataset files and their respective authors, release/version information, and licenses: see the linked Zenodo records.
+
+**Project implementation and reliability audit:** Muhammad Ali Murad. This is an independent benchmark reproduction using publicly available simulated data; it does **not** imply affiliation with CERN, Fermilab, or the dataset authors.
+
+**Historical note:** Earlier exploratory notebooks and README versions reported substantially higher ROC-AUC values. Those results were not established under the verified and independently calibrated evaluation protocol reported here; they must not be mixed with this strict baseline.

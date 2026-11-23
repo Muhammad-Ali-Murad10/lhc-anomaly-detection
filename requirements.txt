@@ -1,0 +1,10 @@
+# Dependencies used by the notebook; TensorFlow version verified from notebook output.
+tensorflow==2.21.0
+numpy>=1.26
+pandas>=2.1
+scikit-learn>=1.4
+scipy>=1.11
+matplotlib>=3.7
+h5py>=3.10
+requests>=2.31
+ipython>=8.0

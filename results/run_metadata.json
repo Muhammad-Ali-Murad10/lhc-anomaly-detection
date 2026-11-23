@@ -1,0 +1,39 @@
+{
+  "seed": 42,
+  "official_background_v2_md5": "08cb4801229f9d480567f8d3f5cac134",
+  "official_background_v2_verified": true,
+  "background_event_count": 13451915,
+  "background_split_counts": {
+    "train": 6725957,
+    "model_validation": 1345191,
+    "calibration": 2690383,
+    "test": 2690384
+  },
+  "threshold_calibration_set": "independent calibration background split",
+  "background_equals_blackbox": false,
+  "background_file": "/kaggle/working/background_for_training.h5",
+  "blackbox_file": "/kaggle/input/datasets/muhammadalikanjoo/lhc-experiment-datasets/BlackBox_background_mix.h5",
+  "signal_files": {
+    "A_to_4leptons": "/kaggle/input/datasets/muhammadalikanjoo/lhc-experiment-datasets/Ato4l_lepFilter_13TeV_filtered.h5",
+    "h0_to_tautau": "/kaggle/input/datasets/muhammadalikanjoo/lhc-experiment-datasets/hToTauTau_13TeV_PU20_filtered.h5",
+    "hplus_to_taunu": "/kaggle/input/datasets/muhammadalikanjoo/lhc-experiment-datasets/hChToTauNu_13TeV_PU20_filtered.h5",
+    "leptoquark_to_btau": "/kaggle/input/datasets/muhammadalikanjoo/lhc-experiment-datasets/leptoquark_LOWMASS_lepFilter_13TeV_filtered.h5"
+  },
+  "input_features": "19 objects x (log1p(pT), eta, phi), flattened to 57 features",
+  "object_type_channel": "dropped for this dense baseline",
+  "scaler": "mean/std fitted on background training split only",
+  "training_split_only": true,
+  "test_used_for_training": false,
+  "epochs_requested": 60,
+  "batch_size": 2048,
+  "best_epoch": 29,
+  "architecture": "57-256-Dropout(0.3)-128-64-128-256-57",
+  "loss": "MSE",
+  "optimizer": "Adam(lr=0.001)",
+  "target_fprs": [
+    0.001,
+    0.0001,
+    1e-05
+  ],
+  "challenge_fraction": 1e-05
+}

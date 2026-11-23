@@ -1,0 +1,19 @@
+# Download official datasets from Zenodo rather than committing copies.
+*.h5
+*.hdf5
+*.hdf
+*.h5.part
+*.hdf5.part
+*.zip
+# Kaggle scratch/cache
+__pycache__/
+.ipynb_checkpoints/
+.virtual_documents/
+*.pyc
+# Model files are optional: publish only if intentionally selected.
+*.keras
+*.npz
+# local environments
+.venv/
+venv/
+.env

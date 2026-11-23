@@ -1,0 +1,53 @@
+{
+  "source": "/kaggle/working/lhc_adc2021_strict_baseline",
+  "verified_background_metadata": true,
+  "background_split_counts": {
+    "train": 6725957,
+    "model_validation": 1345191,
+    "calibration": 2690383,
+    "test": 2690384
+  },
+  "n_signal_metrics": 4,
+  "model_auc_comparison_n": 4,
+  "fpr_audit": [
+    {
+      "nominal_target_fpr": 0.001,
+      "calibration_tail_events": 2690,
+      "n_cal": 2690383,
+      "test_false_positives": 2810,
+      "n_test": 2690384,
+      "observed_fpr": 0.0010444605677107804,
+      "test_fpr_ci95_lower": 0.0010062151333133618,
+      "test_fpr_ci95_upper": 0.0010837863929999193,
+      "test_fpr_relative_to_target": 1.0444605677107803,
+      "binomial_one_sided_p_for_excess": 0.011180374446272725,
+      "status": "above target (95% CI)"
+    },
+    {
+      "nominal_target_fpr": 0.0001,
+      "calibration_tail_events": 269,
+      "n_cal": 2690383,
+      "test_false_positives": 289,
+      "n_test": 2690384,
+      "observed_fpr": 0.00010741960998875997,
+      "test_fpr_ci95_lower": 9.539126516529977e-05,
+      "test_fpr_ci95_upper": 0.00012054475580750354,
+      "test_fpr_relative_to_target": 1.0741960998875997,
+      "binomial_one_sided_p_for_excess": 0.11845912978008906,
+      "status": "inconclusive"
+    },
+    {
+      "nominal_target_fpr": 1e-05,
+      "calibration_tail_events": 26,
+      "n_cal": 2690383,
+      "test_false_positives": 45,
+      "n_test": 2690384,
+      "observed_fpr": 1.6726236849460894e-05,
+      "test_fpr_ci95_lower": 1.2200257223685206e-05,
+      "test_fpr_ci95_upper": 2.238095795190253e-05,
+      "test_fpr_relative_to_target": 1.6726236849460892,
+      "binomial_one_sided_p_for_excess": 0.0008832357642866015,
+      "status": "above target (95% CI)"
+    }
+  ]
+}
